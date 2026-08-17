@@ -40,7 +40,7 @@ system_instruction = (
 # CONFIGURAÇÃO ELEVENLABS
 # =========================
 el_client = ElevenLabs(api_key='sk_80a2d2f3718331ec14ef83404f4292aef23fe8bf9e2bf8c7')
-VOICE_ID = '1TPsKKgCittfxljBUsjX'
+VOICE_ID = '3JdeqiQnLxoeVurZP9dp'
 
 # =========================
 # CONFIGURAÇÃO VOSK
