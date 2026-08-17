@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Botto</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <!-- FUNDO: GRID ANIMADO -->
+  <canvas id="grid-canvas"></canvas>
+
+  <!-- PAINEL PRINCIPAL -->
+  <div class="shell">
+
+    <!-- BARRA DE TÍTULO (drag da janela) -->
+    <div class="titlebar">
+      <span class="titlebar-label">BOTTO // SISTEMA ATIVO</span>
+      <div class="mode-toggle" id="mode-toggle" onclick="alternarModo()" title="Alternar modo voz/texto">
+        <span class="dot dot-green" id="mode-dot"></span>
+        <span class="mode-label" id="mode-label">MODO VOZ</span>
+        </div>
+        <div class="titlebar-controls">
+        <button class="ctrl-btn minimize" onclick="window.close()">—</button>
+        <button class="ctrl-btn close" onclick="window.close()">✕</button>
+      </div>
+    </div>
+
+    <!-- CORPO -->
+    <div class="body">
+
+      <!-- COLUNA ESQUERDA: LOG DO BACKEND -->
+      <div class="panel panel-log">
+        <div class="panel-header">
+          <span class="dot dot-green"></span>
+          <span class="panel-title">SISTEMA // LOG</span>
+        </div>
+        <div class="log-area" id="log-area">
+          <div class="log-line"><span class="log-time">00:00:00</span><span class="log-tag tag-sys">[SYS]</span> Botto inicializado.</div>
+          <div class="log-line"><span class="log-time">00:00:00</span><span class="log-tag tag-sys">[SYS]</span> Flask API ativa na porta 5001.</div>
+          <div class="log-line"><span class="log-time">00:00:00</span><span class="log-tag tag-sys">[SYS]</span> Gemini 2.5 Flash conectado.</div>
+          <div class="log-line"><span class="log-time">00:00:00</span><span class="log-tag tag-sys">[SYS]</span> ElevenLabs TTS pronto.</div>
+          <div class="log-line log-divider">─────────────────────────</div>
+          <div class="log-line"><span class="log-time">00:00:00</span><span class="log-tag tag-info">[INFO]</span> Aguardando entrada do usuário...</div>
+        </div>
+      </div>
+
+      <!-- COLUNA DIREITA: CHAT -->
+      <div class="panel panel-chat">
+
+        <!-- AVATAR DO BOTTO -->
+        <div class="avatar-zone">
+          <div class="avatar-rings">
+            <div class="ring ring-1"></div>
+            <div class="ring ring-2"></div>
+            <div class="ring ring-3"></div>
+          </div>
+          <div class="avatar-core" id="avatar-core">
+            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="40" cy="40" r="38" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4 3"/>
+              <rect x="22" y="20" width="36" height="28" rx="4" stroke="#00d4ff" stroke-width="1.5"/>
+              <rect x="28" y="27" width="8" height="8" rx="2" fill="#00d4ff" opacity="0.8"/>
+              <rect x="44" y="27" width="8" height="8" rx="2" fill="#00d4ff" opacity="0.8"/>
+              <rect x="30" y="39" width="20" height="3" rx="1.5" fill="#00d4ff" opacity="0.5"/>
+              <rect x="34" y="48" width="4" height="8" rx="1" fill="#00d4ff" opacity="0.6"/>
+              <rect x="42" y="48" width="4" height="8" rx="1" fill="#00d4ff" opacity="0.6"/>
+              <rect x="18" y="24" width="4" height="14" rx="2" fill="#00d4ff" opacity="0.4"/>
+              <rect x="58" y="24" width="4" height="14" rx="2" fill="#00d4ff" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="status-line">
+            <span class="dot dot-green pulse"></span>
+            <span class="status-text" id="status-text">AGUARDANDO</span>
+          </div>
+        </div>
+
+        <!-- HISTÓRICO DE MENSAGENS -->
+        <div class="chat-history" id="chat-history">
+          <div class="msg msg-bot">
+            <span class="msg-label">BOTTO</span>
+            <div class="msg-bubble">Humor em 50%. Pronto para cooperação. O que deseja?</div>
+          </div>
+        </div>
+
+        <!-- INPUT -->
+        <div class="input-zone">
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="user-input"
+              class="user-input"
+              placeholder="Digite um comando..."
+              autocomplete="off"
+            />
+            <button class="send-btn" id="send-btn" onclick="enviar()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+          <div class="input-hint">ENTER para enviar · ESC para limpar</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

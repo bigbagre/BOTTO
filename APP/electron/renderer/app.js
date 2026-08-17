@@ -8,25 +8,11 @@ const userInput   = document.getElementById('user-input')
 const sendBtn     = document.getElementById('send-btn')
 const avatarCore  = document.getElementById('avatar-core')
 const statusText  = document.getElementById('status-text')
-const modeToggle = document.getElementById('mode-toggle')
-const modeDot    = document.getElementById('mode-dot')
-const modeLabel  = document.getElementById('mode-label')
+const modeToggle  = document.getElementById('mode-toggle')
+const modeDot     = document.getElementById('mode-dot')
+const modeLabel   = document.getElementById('mode-label')
 
-let modoTexto = true  // false = voz, true = texto
-
-
-function alternarModo() {
-  modoTexto = !modoTexto
-  if (modoTexto) {
-    modeDot.className   = 'dot dot-orange pulse'
-    modeLabel.textContent = 'MODO TEXTO'
-    addLog('SYS', 'Modo texto ativado — entrada por teclado.', 'tag-req')
-  } else {
-    modeDot.className   = 'dot dot-green pulse'
-    modeLabel.textContent = 'MODO VOZ'
-    addLog('SYS', 'Modo voz ativado — entrada por microfone.', 'tag-info')
-  }
-}
+let modoTexto = true  // true = texto, false = voz
 
 // ── CANVAS FUNDO: GRID ANIMADO ──────────────
 const canvas = document.getElementById('grid-canvas')
@@ -46,14 +32,12 @@ function drawGrid() {
   ctx.lineWidth   = 0.5
   const spacing = 40
 
-  // Linhas verticais
   for (let x = 0; x < canvas.width + spacing; x += spacing) {
     ctx.beginPath()
     ctx.moveTo(x, 0)
     ctx.lineTo(x, canvas.height)
     ctx.stroke()
   }
-  // Linhas horizontais animadas
   for (let y = (gridOffset % spacing) - spacing; y < canvas.height + spacing; y += spacing) {
     const alpha = Math.abs(Math.sin((y / canvas.height) * Math.PI)) * 0.6 + 0.1
     ctx.globalAlpha = alpha
@@ -64,7 +48,6 @@ function drawGrid() {
     ctx.globalAlpha = 1
   }
 
-  // Linha de varredura
   const scanY = (gridOffset * 2) % canvas.height
   const grad  = ctx.createLinearGradient(0, scanY - 40, 0, scanY + 40)
   grad.addColorStop(0,   'rgba(0,212,255,0)')
@@ -123,12 +106,14 @@ function addMsg(role, texto, thinking = false) {
 
 function setStatus(estado) {
   const estados = {
-    'idle':      { text: 'AGUARDANDO',   cls: '' },
-    'thinking':  { text: 'PROCESSANDO',  cls: 'thinking' },
-    'speaking':  { text: 'RESPONDENDO',  cls: 'speaking' },
+    'AGUARDANDO':  { cls: '' },
+    'PROCESSANDO': { cls: 'thinking' },
+    'FALANDO':     { cls: 'speaking' },
+    'OUVINDO':     { cls: 'thinking' },
+    'WAKE WORD':   { cls: 'speaking' },
   }
-  const e = estados[estado] || estados['idle']
-  statusText.textContent = e.text
+  const e = estados[estado] || { cls: '' }
+  statusText.textContent = estado
   avatarCore.className   = `avatar-core ${e.cls}`
 }
 
@@ -150,53 +135,86 @@ function reproduzirAudio(audioB64) {
   })
 }
 
-// ── ENVIAR MENSAGEM ───────────────────────────
+// ── SSE: RECEBER EVENTOS DO BACKEND ──────────
+
+function iniciarSSE() {
+  window.botto.iniciarSSE(async ({ tipo, dados }) => {
+    if (tipo === 'log') {
+      const tagMap = {
+        'SYS': 'tag-sys', 'REQ': 'tag-req', 'GEM': 'tag-res',
+        'TTS': 'tag-tts', 'VOZ': 'tag-info', 'WAKE': 'tag-res', 'ERR': 'tag-err'
+      }
+      addLog(dados.tag, dados.msg, tagMap[dados.tag] || 'tag-sys')
+    }
+    if (tipo === 'status') setStatus(dados)
+    if (tipo === 'transcricao') addMsg('user', dados)
+    if (tipo === 'resposta') {
+      addMsg('bot', dados.texto)
+      if (dados.audio) await reproduzirAudio(dados.audio)
+    }
+  })
+}
+
+// ── MODO TEXTO / VOZ ─────────────────────────
+
+async function alternarModo() {
+   modoTexto = !modoTexto
+  const novoModo = modoTexto ? 'texto' : 'voz'
+
+  try {
+    await window.botto.alternarModo(novoModo)
+  } catch (e) {
+    addLog('ERR', 'Falha ao alternar modo.', 'tag-err')
+  }
+
+  if (modoTexto) {
+    modeDot.className     = 'dot dot-green pulse'
+    modeLabel.textContent = 'MODO TEXTO'
+    userInput.disabled    = false
+    sendBtn.disabled      = false
+    userInput.placeholder = 'Digite um comando...'
+    userInput.focus()
+  } else {
+    modeDot.className     = 'dot dot-orange pulse'
+    modeLabel.textContent = 'MODO VOZ'
+    userInput.disabled    = true
+    sendBtn.disabled      = true
+    userInput.placeholder = 'Modo voz ativo — fale "Hey Bot"'
+    setStatus('AGUARDANDO')
+  }
+}
+
+// ── ENVIAR MENSAGEM (MODO TEXTO) ─────────────
 
 async function enviar() {
+  if (!modoTexto) return
   const texto = userInput.value.trim()
-  addLog('SYS', `Entrada via ${modoTexto ? 'texto' : 'voz'}.`, 'tag-info')
   if (!texto) return
 
   userInput.value = ''
   setBusy(true)
-  setStatus('thinking')
+  setStatus('PROCESSANDO')
 
-  // Exibe mensagem do usuário
   addMsg('user', texto)
 
-  // Log da requisição
-  addLog('REQ', `POST /mensagem → "${texto.substring(0, 40)}${texto.length > 40 ? '...' : ''}"`, 'tag-req')
-  addLog('GEM', 'Enviando para Gemini 2.5 Flash...', 'tag-info')
-
-  // Bolha "pensando"
   const thinkingBubble = addMsg('bot', '', true)
 
   try {
-    const inicio = Date.now()
+    const res = await window.botto.enviarMensagem(texto)
 
-    const res  = await window.botto.enviarMensagem(texto)
-    const ms   = Date.now() - inicio
-
-    // Remove bolha de pensamento
     thinkingBubble.remove()
 
     if (res.erro) {
       addLog('ERR', res.erro, 'tag-err')
       addMsg('bot', `Erro: ${res.erro}`)
-      setStatus('idle')
+      setStatus('AGUARDANDO')
       setBusy(false)
       return
     }
 
-    // Log da resposta
-    addLog('GEM', `Resposta em ${ms}ms (${res.texto.length} chars)`, 'tag-res')
-    addLog('TTS', 'Sintetizando áudio via ElevenLabs...', 'tag-tts')
-
-    // Exibe texto da resposta
     addMsg('bot', res.texto)
 
-    // Reproduz áudio
-    setStatus('speaking')
+    setStatus('FALANDO')
     if (res.audio) {
       await reproduzirAudio(res.audio)
       addLog('TTS', 'Reprodução concluída.', 'tag-tts')
@@ -205,10 +223,10 @@ async function enviar() {
   } catch (err) {
     thinkingBubble.remove()
     addLog('ERR', `Falha na conexão: ${err.message}`, 'tag-err')
-    addMsg('bot', 'Erro de conexão com o backend. Verifique se o api.py está rodando.')
+    addMsg('bot', 'Erro de conexão com o backend.')
   }
 
-  setStatus('idle')
+  setStatus('AGUARDANDO')
   setBusy(false)
 }
 
@@ -227,9 +245,9 @@ userInput.addEventListener('keydown', (e) => {
 // ── INICIALIZAÇÃO ─────────────────────────────
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Atualiza os horários dos logs iniciais para o horário real
   document.querySelectorAll('.log-time').forEach(el => {
     el.textContent = agora()
   })
+  iniciarSSE()
   userInput.focus()
 })

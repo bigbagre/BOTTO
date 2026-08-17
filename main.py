@@ -70,7 +70,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Área de Trabalho\\Engenharia\\BOTTO\\Hey_Bot.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=["C:\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_bot.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(
