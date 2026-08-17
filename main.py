@@ -70,7 +70,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Área de Trabalho\\Engenharia\\TARS\\Hey_Bot.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Área de Trabalho\\Engenharia\\BOTTO\\Hey_Bot.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(
@@ -89,7 +89,7 @@ el_client = ElevenLabs(api_key="sk_80a2d2f3718331ec14ef83404f4292aef23fe8bf9e2bf
 def falar(texto):
     print("Botto:", texto)
     audio = el_client.text_to_speech.convert(
-        voice_id="1TPsKKgCittfxljBUsjX",
+        voice_id="3JdeqiQnLxoeVurZP9dp",
         text=texto,
         model_id="eleven_multilingual_v2"
     )
