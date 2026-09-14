@@ -15,3 +15,14 @@
 
         O .gitignore existe para que todos tenham as versões mais recentes do electron no seu repositorio, pois originalmente no meu computador é ali onde comporta os arquivos do electron, isso não afeta vocês.
         
+
+        Para o servidor:
+               Somente quem tem acesso ao comptador: 
+                Tailscaled & - abre a vpn
+                Tailscale up - conecta a vpn
+
+               Quem vai acessar:
+                Faça login no tailscale.com, pode fazer de qualquer forma, mas eu fiz com o github
+                Entrem no link de convite: (https://login.tailscale.com/uinv/ieGeoEtnam11t8kJgZzbq11)
+                Utilize o Ip do servidor (nomeado como puppylinux) quando for implementar o seu código
+                http://100.123.51.17:5001/dados - Abre o banco de dados e informa os comandos para enviar e buscar os dados
