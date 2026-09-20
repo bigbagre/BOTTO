@@ -68,7 +68,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 # =========================
 openwakeword.utils.download_models()
 wakeword_model = WakeWordModel(
-    wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_bot.onnx"],
+    wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"],
     inference_framework="onnx"
 )
 
@@ -78,7 +78,8 @@ audio_stream = pa.open(
     channels=1,
     format=pyaudio.paInt16,
     input=True,
-    frames_per_buffer=1280
+    frames_per_buffer=1280,
+    input_device_index=1
 )
 
 # =========================

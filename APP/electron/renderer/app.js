@@ -158,13 +158,16 @@ function iniciarSSE() {
 // ── MODO TEXTO / VOZ ─────────────────────────
 
 async function alternarModo() {
-   modoTexto = !modoTexto
+ console.log('alternarModo chamado, modoTexto atual:', modoTexto)
+  modoTexto = !modoTexto
   const novoModo = modoTexto ? 'texto' : 'voz'
+  console.log('novo modo:', novoModo)
 
   try {
-    await window.botto.alternarModo(novoModo)
+    const res = await window.botto.alternarModo(novoModo)
+    console.log('resposta do backend:', res)
   } catch (e) {
-    addLog('ERR', 'Falha ao alternar modo.', 'tag-err')
+    console.log('erro:', e)
   }
 
   if (modoTexto) {

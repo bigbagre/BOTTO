@@ -23,7 +23,7 @@ import os
 
 
 
-MODO_TEXTO = True
+MODO_TEXTO = False
 
 app = Flask(__name__)
 CORS(app)
@@ -34,9 +34,6 @@ def iniciar_flask():
 load_dotenv(dotenv_path=r"C:\Users\renat\OneDrive\Documentos\Engenharia\BOTTO\.env")
 gemini_key = os.environ["GEMINI_API_KEY"]
 eleven_key = os.environ["ELEVENLABS_API_KEY"]
-
-print("Gemini key:", gemini_key[:10] if gemini_key else "NÃO ENCONTRADA")
-print("ElevenLabs key:", eleven_key[:10] if eleven_key else "NÃO ENCONTRADA")
 
 client = genai.Client(api_key=gemini_key)
 
@@ -78,7 +75,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_bot.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(
@@ -86,7 +83,8 @@ audio_stream = pa.open(
     channels=1,
     format=pyaudio.paInt16,
     input=True,
-    frames_per_buffer=1280
+    frames_per_buffer=1280,
+    input_device_index=1
 )
 
 el_client = ElevenLabs(api_key=eleven_key)
