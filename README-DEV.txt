@@ -17,7 +17,7 @@
         
 
         Para o servidor:
-               Somente quem tem acesso ao comptador: 
+               Somente quem tem acesso ao servidor fisico: 
                 Tailscaled & - abre a vpn
                 Tailscale up - conecta a vpn
 
@@ -25,4 +25,14 @@
                 Faça login no tailscale.com, pode fazer de qualquer forma, mas eu fiz com o github
                 Entrem no link de convite: (https://login.tailscale.com/uinv/ieGeoEtnam11t8kJgZzbq11)
                 Utilize o Ip do servidor (nomeado como puppylinux) quando for implementar o seu código
-                http://100.123.51.17:5001/dados - Abre o banco de dados e informa os comandos para enviar e buscar os dados
+                http://100.123.51.17:5000/teste - Abre o banco de dados e informa os comandos para enviar e buscar os dados
+
+                Como testar:
+                    Vai no teste_servidor.py, altera os valores (tanto o nome quanto o valor) = (isso em : 'Nome': 'vc vai mudar aq', 'Valor': 'vc vai mudar aqui tbm')
+                    Quando rodar o código, no terminal deve aparecer algo do tipo: 
+                        201
+                        {'Nome': 'Sensor1', 'Valor': 15, 'id': 1, 'status': 'criado'}
+                        200
+                        [{'Nome': 'Sensor1', 'Valor': 15, 'criado_em': '2026-09-20 14:17:16', 'id': 1}]
+
+                    Se aparecer isso, coloca no seu navegador: http://100.123.51.17:5000/teste e lá deve aparecer os seus valores
