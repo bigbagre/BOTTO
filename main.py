@@ -18,6 +18,10 @@ import io
 import threading
 import base64
 import time
+from dotenv import load_dotenv
+import os
+
+
 
 MODO_TEXTO = True
 
@@ -27,10 +31,14 @@ CORS(app)
 def iniciar_flask():
     app.run(port=5001, use_reloader=False)
 
-# =========================
-# CONFIGURAÇÃO GEMINI
-# =========================
-client = genai.Client(api_key="AIzaSyCQl6LPNqwb-pjO-wXFIZmwaoHF6PZG1Wg")
+load_dotenv(dotenv_path=r"C:\Users\renat\OneDrive\Documentos\Engenharia\BOTTO\.env")
+gemini_key = os.environ["GEMINI_API_KEY"]
+eleven_key = os.environ["ELEVENLABS_API_KEY"]
+
+print("Gemini key:", gemini_key[:10] if gemini_key else "NÃO ENCONTRADA")
+print("ElevenLabs key:", eleven_key[:10] if eleven_key else "NÃO ENCONTRADA")
+
+client = genai.Client(api_key=gemini_key)
 
 system_instruction = (
     "Você é um robô assistente chamado Botto. "
@@ -70,7 +78,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_bot.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_bot.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(
@@ -81,10 +89,7 @@ audio_stream = pa.open(
     frames_per_buffer=1280
 )
 
-# =========================
-# CONFIGURAÇÃO ELEVENLABS
-# =========================
-el_client = ElevenLabs(api_key="sk_80a2d2f3718331ec14ef83404f4292aef23fe8bf9e2bf8c7")
+el_client = ElevenLabs(api_key=eleven_key)
 
 def falar(texto):
     print("Botto:", texto)
@@ -123,7 +128,7 @@ def ouvir():
 def perguntar_ia(pergunta):
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=pergunta,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction
@@ -146,7 +151,7 @@ def mensagem():
     texto = dados.get('texto', '')
     texto_resposta = perguntar_ia(texto)
     audio = el_client.text_to_speech.convert(
-        voice_id="1TPsKKgCittfxljBUsjX",
+        voice_id="3JdeqiQnLxoeVurZP9dp",
         text=texto_resposta,
         model_id="eleven_multilingual_v2"
     )

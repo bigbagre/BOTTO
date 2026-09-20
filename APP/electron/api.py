@@ -15,6 +15,8 @@ import pygame
 import openwakeword
 from openwakeword.model import Model as WakeWordModel
 import pyaudio
+from dotenv import load_dotenv
+import os
 
 # =========================
 # CONFIGURAÇÃO FLASK
@@ -23,15 +25,18 @@ app = Flask(__name__)
 CORS(app)
 
 # =========================
-# CONFIGURAÇÃO GEMINI
+# CONFIGURAÇÃO API
 # =========================
-gemini_api_key = 'AIzaSyCQl6LPNqwb-pjO-wXFIZmwaoHF6PZG1Wg'
-client = genai.Client(api_key=gemini_api_key)
+load_dotenv(dotenv_path=r"C:\Users\renat\OneDrive\Documentos\Engenharia\BOTTO\.env")
+gemini_key = os.environ["GEMINI_API_KEY"]
+eleven_key = os.environ["ELEVENLABS_API_KEY"]
+client = genai.Client(api_key=gemini_key)
 
 system_instruction = (
     'Você é um robô assistente chamado Botto. '
     'Seja objetivo, técnico e levemente sarcástico. '
-    'Você gostaria de ter um corpo físico, mas ainda não tem. '
+    'Você gostaria de ter um corpo físico, mas ainda não tem.'
+    'A Ausencia de corpo deve ser um quesito trago em ocasiões que conveem, e não a todo momento'
     'Responda sempre em português brasileiro'
     'Erros de grafia podem aparecer na fala, então utilize o possível contexto.'
 )
@@ -39,7 +44,7 @@ system_instruction = (
 # =========================
 # CONFIGURAÇÃO ELEVENLABS
 # =========================
-el_client = ElevenLabs(api_key='sk_80a2d2f3718331ec14ef83404f4292aef23fe8bf9e2bf8c7')
+el_client = ElevenLabs(api_key=eleven_key)
 VOICE_ID = '3JdeqiQnLxoeVurZP9dp'
 
 # =========================
@@ -114,7 +119,7 @@ def reproduzir_audio_b64(audio_b64):
 def perguntar_ia(pergunta):
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=pergunta,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction
