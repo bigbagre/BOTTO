@@ -20,9 +20,13 @@ import base64
 import time
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
+# =========================
+# CONSTANTES
+# =========================
 
-
+USER_DIR = Path(__file__).resolve().parent
 MODO_TEXTO = False
 
 app = Flask(__name__)
@@ -31,7 +35,7 @@ CORS(app)
 def iniciar_flask():
     app.run(port=5001, use_reloader=False)
 
-load_dotenv(dotenv_path=r"C:\Users\renat\OneDrive\Documentos\Engenharia\BOTTO\.env")
+load_dotenv()
 gemini_key = os.environ["GEMINI_API_KEY"]
 eleven_key = os.environ["ELEVENLABS_API_KEY"]
 
@@ -75,7 +79,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=[USER_DIR / "Hey_Jarvis.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(

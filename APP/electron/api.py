@@ -17,6 +17,12 @@ from openwakeword.model import Model as WakeWordModel
 import pyaudio
 from dotenv import load_dotenv
 import os
+from pathlib import Path
+
+# =========================
+# CONSTANTES
+# =========================
+USER_DIR = Path(__file__).resolve().parents[2]
 
 # =========================
 # CONFIGURAÇÃO FLASK
@@ -27,7 +33,7 @@ CORS(app)
 # =========================
 # CONFIGURAÇÃO API
 # =========================
-load_dotenv(dotenv_path=r"C:\Users\renat\OneDrive\Documentos\Engenharia\BOTTO\.env")
+load_dotenv(dotenv_path= USER_DIR)
 gemini_key = os.environ["GEMINI_API_KEY"]
 eleven_key = os.environ["ELEVENLABS_API_KEY"]
 client = genai.Client(api_key=gemini_key)
@@ -51,7 +57,7 @@ VOICE_ID = '3JdeqiQnLxoeVurZP9dp'
 # CONFIGURAÇÃO VOSK
 # =========================
 vosk.SetLogLevel(-1)
-vosk_model = vosk.Model("C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\vosk-model-small-pt-0.3")
+vosk_model = vosk.Model(USER_DIR / "vosk-model-small-pt-0.3")
 rec = vosk.KaldiRecognizer(vosk_model, 16000)
 vosk_queue = queue.Queue()
 
@@ -68,7 +74,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 # =========================
 openwakeword.utils.download_models()
 wakeword_model = WakeWordModel(
-    wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"],
+    wakeword_models=[ USER_DIR / "Hey_Jarvis.onnx"],
     inference_framework="onnx"
 )
 

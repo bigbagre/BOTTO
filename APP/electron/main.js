@@ -3,12 +3,14 @@ const { spawn } = require('child_process')
 const path = require('path')
 const http = require('http')
 
+const USER_DIR = path.resolve(__dirname, '..', '..');
+
 let pythonProcess = null
 let mainWindow = null
 
 function startPython() {
   pythonProcess = spawn('python', [
-    'C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\api.py'
+    path.join(USER_DIR, 'APP/electron/api.py')
   ])
   pythonProcess.stdout.on('data', (data) => console.log('Python:', data.toString()))
   pythonProcess.stderr.on('data', (data) => console.error('Python err:', data.toString()))
