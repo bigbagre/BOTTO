@@ -51,7 +51,7 @@ VOICE_ID = '3JdeqiQnLxoeVurZP9dp'
 # CONFIGURAÇÃO VOSK
 # =========================
 vosk.SetLogLevel(-1)
-vosk_model = vosk.Model("C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\vosk-model-small-pt-0.3")
+vosk_model = vosk.Model("C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\vosk-model-small-pt-0.3")
 rec = vosk.KaldiRecognizer(vosk_model, 16000)
 vosk_queue = queue.Queue()
 
@@ -68,7 +68,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 # =========================
 openwakeword.utils.download_models()
 wakeword_model = WakeWordModel(
-    wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"],
+    wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\Hey_Jarvis.onnx"],
     inference_framework="onnx"
 )
 

@@ -7,18 +7,29 @@ let pythonProcess = null
 let mainWindow = null
 
 function startPython() {
-  pythonProcess = spawn('python', [
-    'C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\api.py'
-  ])
+  let pythonPath, args
+
+  if (app.isPackaged) {
+    // Rodando como executável empacotado
+    pythonPath = path.join(process.resourcesPath, 'dist', 'api', 'api.exe')
+    args = []
+  } else {
+    // Rodando em desenvolvimento
+    pythonPath = 'python'
+    args = [path.join(__dirname, '..', 'api.py')]
+  }
+
+  pythonProcess = spawn(pythonPath, args)
   pythonProcess.stdout.on('data', (data) => console.log('Python:', data.toString()))
   pythonProcess.stderr.on('data', (data) => console.error('Python err:', data.toString()))
+  pythonProcess.on('close', (code) => console.log('Python encerrou com código:', code))
 }
 
-function postJSON(path, body) {
+function postJSON(rota, body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body)
     const req = http.request({
-      hostname: 'localhost', port: 5001, path, method: 'POST',
+      hostname: 'localhost', port: 5001, path: rota, method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
     }, (res) => {
       let raw = ''
@@ -46,9 +57,9 @@ function iniciarSSE() {
         }
       }
     })
-    res.on('end', () => setTimeout(iniciarSSE, 2000))
+    res.on('end', () => setTimeout(iniciarSSE, 5000))
   })
-  req.on('error', () => setTimeout(iniciarSSE, 2000))
+  req.on('error', () => setTimeout(iniciarSSE, 10000))
   req.end()
 }
 
