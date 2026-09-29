@@ -10,16 +10,17 @@ function startPython() {
   let pythonPath, args
 
   if (app.isPackaged) {
-    // Rodando como executável empacotado
     pythonPath = path.join(process.resourcesPath, 'dist', 'api', 'api.exe')
     args = []
   } else {
-    // Rodando em desenvolvimento
     pythonPath = 'python'
-    args = [path.join(__dirname, '..', 'api.py')]
+    args = [path.join(__dirname, 'api.py')]
   }
 
-  pythonProcess = spawn(pythonPath, args)
+  pythonProcess = spawn(pythonPath, args, {
+    cwd: app.isPackaged ? path.join(process.resourcesPath, 'dist', 'api') : path.join(__dirname, '..'),
+    env: { ...process.env }
+  })
   pythonProcess.stdout.on('data', (data) => console.log('Python:', data.toString()))
   pythonProcess.stderr.on('data', (data) => console.error('Python err:', data.toString()))
   pythonProcess.on('close', (code) => console.log('Python encerrou com código:', code))
@@ -34,11 +35,35 @@ function postJSON(rota, body) {
     }, (res) => {
       let raw = ''
       res.on('data', chunk => raw += chunk)
-      res.on('end', () => resolve(JSON.parse(raw)))
+      res.on('end', () => { try { resolve(JSON.parse(raw)) } catch { resolve({}) } })
     })
     req.on('error', reject)
     req.write(data)
     req.end()
+  })
+}
+
+function aguardarFlask(tentativas = 0) {
+  return new Promise((resolve) => {
+    const tentar = (n) => {
+      if (n > 40) {
+        resolve(false)
+        return
+      }
+
+      const progresso = Math.min(90, Math.round((n / 40) * 90))
+      if (mainWindow) mainWindow.webContents.send('loading-progress', { progresso, tentativa: n })
+
+      const req = http.request(
+        { hostname: 'localhost', port: 5001, path: '/mensagem', method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': 2 } },
+        () => resolve(true)
+      )
+      req.on('error', () => setTimeout(() => tentar(n + 1), 500))
+      req.write('{}')
+      req.end()
+    }
+    tentar(tentativas)
   })
 }
 
@@ -81,15 +106,31 @@ function createWindow() {
       contextIsolation: true
     }
   })
+
   mainWindow.loadFile('renderer/index.html')
+
+  mainWindow.webContents.once('did-finish-load', async () => {
+    mainWindow.webContents.send('loading-status', 'INICIALIZANDO PYTHON')
+    
+    const ok = await aguardarFlask()
+
+    if (ok) {
+      mainWindow.webContents.send('loading-progress', { progresso: 100, tentativa: 0 })
+      mainWindow.webContents.send('loading-status', 'SISTEMA PRONTO')
+      setTimeout(() => {
+        mainWindow.webContents.send('loading-done')
+        setTimeout(iniciarSSE, 500)
+      }, 800)
+    } else {
+      mainWindow.webContents.send('loading-status', 'FALHA NA CONEXÃO COM O BACKEND')
+      mainWindow.webContents.send('loading-error')
+    }
+  })
 }
 
 app.whenReady().then(() => {
   startPython()
-  setTimeout(() => {
-    createWindow()
-    setTimeout(iniciarSSE, 3000)
-  }, 5000)
+  setTimeout(createWindow, 1000)
 })
 
 app.on('window-all-closed', () => {

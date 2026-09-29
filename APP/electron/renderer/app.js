@@ -252,5 +252,61 @@ window.addEventListener('DOMContentLoaded', () => {
     el.textContent = agora()
   })
   iniciarSSE()
+  
+  // ── LOADING SCREEN ───────────────────────────
+
+const loadingScreen = document.getElementById('loading-screen')
+const mainShell     = document.getElementById('main-shell')
+const loadingStatus = document.getElementById('loading-status')
+const loadingBar    = document.getElementById('loading-bar')
+const loadingLog    = document.getElementById('loading-log')
+
+const loadingSteps = [
+  'Iniciando Flask API...',
+  'Carregando modelos de voz...',
+  'Conectando ao Gemini...',
+  'Inicializando ElevenLabs...',
+  'Verificando wake word...',
+]
+
+function addLoadingLog(msg, tipo = '') {
+  const line = document.createElement('div')
+  line.className = `loading-log-line ${tipo}`
+  line.textContent = msg
+  loadingLog.appendChild(line)
+  if (loadingLog.children.length > 5) loadingLog.removeChild(loadingLog.firstChild)
+}
+
+window.botto.onLoadingStatus((msg) => {
+  loadingStatus.innerHTML = msg + '<span class="dots-anim"></span>'
+})
+
+window.botto.onLoadingProgress(({ progresso, tentativa }) => {
+  loadingBar.style.width = progresso + '%'
+  if (tentativa > 0 && tentativa % 4 === 0) {
+    const stepIdx = Math.floor((tentativa / 40) * loadingSteps.length)
+    if (loadingSteps[stepIdx]) addLoadingLog(loadingSteps[stepIdx])
+  }
+})
+
+window.botto.onLoadingDone(() => {
+  loadingBar.style.width = '100%'
+  loadingStatus.innerHTML = 'SISTEMA PRONTO'
+  addLoadingLog('✓ Backend conectado', 'ok')
+  addLoadingLog('✓ Pronto para uso', 'ok')
+  setTimeout(() => {
+    loadingScreen.classList.add('hidden')
+    mainShell.classList.remove('hidden')
+    iniciarSSE()
+    userInput.focus()
+  }, 800)
+})
+
+window.botto.onLoadingError(() => {
+  loadingStatus.innerHTML = 'FALHA NA CONEXÃO'
+  addLoadingLog('✗ Backend não respondeu', 'err')
+  addLoadingLog('Verifique o api.py e tente novamente', 'err')
+  loadingBar.style.background = 'var(--red)'
+})
   userInput.focus()
 })

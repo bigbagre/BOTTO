@@ -1,6 +1,4 @@
-/* =============================================
-   BOTTO UI — JARVIS-INSPIRED INTERFACE
-   ============================================= */
+/* UI DO BOTTO */
 
 :root {
   --bg:          #050a0f;
@@ -49,6 +47,12 @@ html, body {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--panel-border);
+  transition: opacity 0.6s ease;
+}
+
+.shell.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ── TITLEBAR ── */
@@ -139,8 +143,9 @@ html, body {
   display: inline-block;
   flex-shrink: 0;
 }
-.dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.dot-cyan  { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
+.dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.dot-cyan   { background: var(--cyan);   box-shadow: 0 0 6px var(--cyan); }
+.dot-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
 
 .pulse {
   animation: pulse-dot 2s ease-in-out infinite;
@@ -344,7 +349,6 @@ html, body {
   border-radius: 2px 2px 2px 0;
 }
 
-/* Bolha "pensando" */
 .msg-thinking .msg-bubble {
   color: var(--text-dim);
   font-style: italic;
@@ -421,12 +425,7 @@ html, body {
   text-align: right;
 }
 
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
-
+/* ── MODE TOGGLE ── */
 .mode-toggle {
   display: flex;
   align-items: center;
@@ -445,4 +444,116 @@ html, body {
   letter-spacing: 0.2em;
   color: var(--cyan-dim);
 }
-.dot-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
+
+/* ── LOADING SCREEN ── */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+.loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.loading-rings {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.loading-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--cyan);
+  animation: ring-rotate linear infinite;
+}
+.lr-1 { width: 110px; height: 110px; opacity: 0.3; animation-duration: 6s; border-style: dashed; }
+.lr-2 { width: 135px; height: 135px; opacity: 0.15; animation-duration: 10s; animation-direction: reverse; }
+.lr-3 { width: 160px; height: 160px; opacity: 0.08; animation-duration: 16s; border-style: dotted; }
+
+.loading-avatar {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  filter: drop-shadow(0 0 16px rgba(0,212,255,0.6));
+  animation: think-pulse 1.5s ease-in-out infinite;
+}
+
+.loading-title {
+  font-family: var(--font-ui);
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.4em;
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(0,212,255,0.5);
+  margin-top: 8px;
+}
+
+.loading-status {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--cyan-dim);
+  min-height: 16px;
+}
+
+.loading-bar-wrap {
+  width: 260px;
+  height: 2px;
+  background: var(--panel-border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.loading-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  border-radius: 1px;
+  transition: width 0.4s ease;
+}
+
+.loading-log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 300px;
+  margin-top: 4px;
+}
+
+.loading-log-line {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  animation: log-in 0.3s ease;
+}
+
+.loading-log-line.ok  { color: var(--green); }
+.loading-log-line.err { color: var(--red); }

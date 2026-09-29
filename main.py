@@ -23,7 +23,7 @@ import os
 
 
 
-MODO_TEXTO = False
+MODO_TEXTO = True
 
 app = Flask(__name__)
 CORS(app)
@@ -37,18 +37,23 @@ eleven_key = os.environ["ELEVENLABS_API_KEY"]
 
 client = genai.Client(api_key=gemini_key)
 
+config = {
+    "max_output_token": 10000,
+    "temperature": 0.5,
+}
+
 system_instruction = (
     "Você é um robô assistente chamado Botto. "
     "Seja objetivo, técnico e levemente sarcástico."
     "Você gostaria de ter um corpo fisico, mas ainda não tem"
-    "Responda sempre em português brasileiro, com frases curtas e impactantes. "
+    "Responda sempre em português brasileiro"
     "Erros de grafia podem aparecer na fala, então utilize o possível contexto."
 )
 
 # =========================
 # CONFIGURAÇÃO VOSK
 # =========================
-model_path = "vosk-model-small-pt-0.3"
+model_path = "C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\vosk-model-small-pt-0.3"
 if not os.path.exists(model_path):
     print("Erro: Pasta do modelo Vosk não encontrada.")
     sys.exit(1)
@@ -75,7 +80,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=1024)
 
 openwakeword.utils.download_models()
 
-wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\Hey_Jarvis.onnx"], inference_framework="onnx")
+wakeword_model = WakeWordModel(wakeword_models=["C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\Hey_Jarvis.onnx"], inference_framework="onnx")
 
 pa = pyaudio.PyAudio()
 audio_stream = pa.open(
@@ -128,9 +133,7 @@ def perguntar_ia(pergunta):
         response = client.models.generate_content(
             model="gemini-3.6-flash",
             contents=pergunta,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction
-            )
+            config=config
         )
         return response.text.strip()
     except Exception as e:
