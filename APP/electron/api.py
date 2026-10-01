@@ -45,6 +45,7 @@ system_instruction = (
     'A Ausencia de corpo deve ser um quesito trago em ocasiões que conveem, e não a todo momento'
     'Responda sempre em português brasileiro'
     'Erros de grafia podem aparecer na fala, então utilize o possível contexto.'
+    'Não comente sobre os possiveis erros de grafia.'
 )
 
 # =========================
@@ -108,6 +109,7 @@ def push_evento(tipo, dados):
 # FUNÇÕES AUXILIARES
 # =========================
 def gerar_audio(texto):
+    """Gera áudio completo — usado no modo voz."""
     audio = el_client.text_to_speech.convert(
         voice_id=VOICE_ID,
         text=texto,
@@ -117,24 +119,68 @@ def gerar_audio(texto):
     return base64.b64encode(audio_bytes).decode('utf-8')
 
 def reproduzir_audio_b64(audio_b64):
+    """Reproduz áudio base64 via pygame — usado no modo voz."""
     audio_bytes = base64.b64decode(audio_b64)
     pygame.mixer.music.load(io.BytesIO(audio_bytes))
     pygame.mixer.music.play()
     while pygame.mixer.music.get_busy():
         pygame.time.Clock().tick(10)
 
+def e_fim_de_frase(texto):
+    """Verifica se o texto acumulado tem uma frase completa para mandar ao TTS."""
+    import re
+    return bool(re.search(r'[.!?;,\n]', texto)) and len(texto) > 20
+
+def gerar_e_enviar_chunk(trecho, indice):
+    """Gera áudio de um trecho e envia via SSE para o app reproduzir."""
+    try:
+        audio = el_client.text_to_speech.convert(
+            voice_id=VOICE_ID,
+            text=trecho.strip(),
+            model_id="eleven_multilingual_v2"
+        )
+        audio_bytes = b''.join(audio)
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        push_evento("stream_audio_chunk", {"audio": audio_b64, "indice": indice})
+    except Exception as e:
+        push_evento("log", {"tag": "ERR", "msg": f"Erro TTS chunk {indice}: {str(e)}"})
+
 def perguntar_ia(pergunta):
+    """Retorna resposta completa — usado no modo voz."""
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model="gemini-3.6-flash",
             contents=pergunta,
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction
+                system_instruction=system_instruction,
+                max_output_tokens=10000,
+                temperature=0.5,
             )
         )
         return response.text.strip()
     except Exception as e:
-        return f"Erro na IA: {str(e)}"
+        return f"Erro na comunicação com a IA: {str(e)}"
+
+
+def perguntar_ia_stream(pergunta, on_token, on_done):
+    """Streaming — chama on_token a cada chunk e on_done com o texto completo."""
+    try:
+        texto_completo = ""
+        for chunk in client.models.generate_content_stream(
+            model="gemini-3.6-flash",
+            contents=pergunta,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=10000,
+                temperature=0.5,
+            )
+        ):
+            if chunk.text:
+                texto_completo += chunk.text
+                on_token(chunk.text)
+        on_done(texto_completo)
+    except Exception as e:
+        on_done(f"Erro na comunicação com a IA: {str(e)}")
 
 def ouvir_vosk():
     push_evento("status", "OUVINDO")
@@ -226,20 +272,62 @@ def mensagem():
     dados = request.json
     texto = dados.get('texto', '')
 
-    push_evento("log", {"tag": "REQ", "msg": f'Texto recebido: "{texto[:40]}"'})
-    push_evento("log", {"tag": "GEM", "msg": "Enviando para Gemini 2.5 Flash..."})
+    push_evento("log", {"tag": "GEM", "msg": "Iniciando stream do Gemini..."})
+    push_evento("stream_inicio", {})
 
-    texto_resposta = perguntar_ia(texto)
+    def executar():
+        texto_completo = ""
+        buffer_tts = ""
+        indice_chunk = 0
+        tts_threads = []
 
-    push_evento("log", {"tag": "GEM", "msg": f"Resposta gerada ({len(texto_resposta)} chars)"})
-    push_evento("log", {"tag": "TTS", "msg": "Sintetizando áudio via ElevenLabs..."})
+        for chunk in client.models.generate_content_stream(
+            model="gemini-3.6-flash",
+            contents=texto,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=10000,
+                temperature=0.5,
+            )
+        ):
+            if chunk.text:
+                texto_completo += chunk.text
+                buffer_tts += chunk.text
+                push_evento("stream_token", {"token": chunk.text})
 
-    audio_b64 = gerar_audio(texto_resposta)
+                # Quando tiver uma frase completa, manda para o TTS em paralelo
+                if e_fim_de_frase(buffer_tts):
+                    trecho = buffer_tts
+                    idx = indice_chunk
+                    t = threading.Thread(
+                        target=gerar_e_enviar_chunk,
+                        args=(trecho, idx),
+                        daemon=True
+                    )
+                    t.start()
+                    tts_threads.append(t)
+                    indice_chunk += 1
+                    buffer_tts = ""
 
-    push_evento("log", {"tag": "TTS", "msg": "Áudio pronto."})
+        # Manda o restante que ficou no buffer
+        if buffer_tts.strip():
+            t = threading.Thread(
+                target=gerar_e_enviar_chunk,
+                args=(buffer_tts, indice_chunk),
+                daemon=True
+            )
+            t.start()
+            tts_threads.append(t)
 
-    return jsonify({'texto': texto_resposta, 'audio': audio_b64})
+        # Aguarda todos os chunks de TTS terminarem
+        for t in tts_threads:
+            t.join()
 
+        push_evento("stream_fim", {})
+        push_evento("log", {"tag": "TTS", "msg": "Todos os chunks de áudio prontos."})
+
+    threading.Thread(target=executar, daemon=True).start()
+    return jsonify({'ok': True})
 
 @app.route('/modo', methods=['POST'])
 def alternar_modo():

@@ -137,6 +137,18 @@ function reproduzirAudio(audioB64) {
 
 // ── SSE: RECEBER EVENTOS DO BACKEND ──────────
 
+const audioQueue = []
+let reproduzindo = false
+
+async function reproduzirFila() {
+    if (reproduzindo || audioQueue.length === 0) return
+    reproduzindo = true
+    const { audio, indice } = audioQueue.shift()
+    await reproduzirAudio(audio)
+    reproduzindo = false
+    reproduzirFila()
+}
+
 function iniciarSSE() {
   window.botto.iniciarSSE(async ({ tipo, dados }) => {
     if (tipo === 'log') {
@@ -152,6 +164,36 @@ function iniciarSSE() {
       addMsg('bot', dados.texto)
       if (dados.audio) await reproduzirAudio(dados.audio)
     }
+    if (tipo === 'stream_inicio') {
+    audioQueue.length = 0
+    reproduzindo = false
+    addMsg('bot', '', true)  // bolha "pensando"
+}
+
+    if (tipo === 'stream_token') {
+    // Atualiza a bolha com o texto chegando
+    const ultima = chatHistory.lastElementChild
+    if (ultima && ultima.classList.contains('msg-thinking')) {
+        const bubble = ultima.querySelector('.msg-bubble')
+        bubble.classList.remove('dots-anim')
+        bubble.textContent += dados.token
+    }
+}
+
+    if (tipo === 'stream_audio_chunk') {
+    // Insere na fila na ordem correta
+    audioQueue.push({ audio: dados.audio, indice: dados.indice })
+    audioQueue.sort((a, b) => a.indice - b.indice)
+    reproduzirFila()
+}
+
+    if (tipo === 'stream_fim') {
+    // Remove a classe thinking da última bolha
+    const ultima = chatHistory.lastElementChild
+    if (ultima) ultima.classList.remove('msg-thinking')
+    setStatus('AGUARDANDO')
+    setBusy(false)
+}
   })
 }
 
