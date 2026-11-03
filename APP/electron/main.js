@@ -21,9 +21,13 @@ function startPython() {
     cwd: app.isPackaged ? path.join(process.resourcesPath, 'dist', 'api') : path.join(__dirname, '..'),
     env: { ...process.env }
   })
+
   pythonProcess.stdout.on('data', (data) => console.log('Python:', data.toString()))
   pythonProcess.stderr.on('data', (data) => console.error('Python err:', data.toString()))
-  pythonProcess.on('close', (code) => console.log('Python encerrou com código:', code))
+
+  pythonProcess.on('close', (code) => {
+    console.log('Python encerrou com código:', code)
+  })
 }
 
 function postJSON(rota, body) {
@@ -46,12 +50,12 @@ function postJSON(rota, body) {
 function aguardarFlask(tentativas = 0) {
   return new Promise((resolve) => {
     const tentar = (n) => {
-      if (n > 40) {
+      if (n > 100) {
         resolve(false)
         return
       }
 
-      const progresso = Math.min(90, Math.round((n / 40) * 90))
+      const progresso = Math.min(90, Math.round((n / 100) * 90))
       if (mainWindow) mainWindow.webContents.send('loading-progress', { progresso, tentativa: n })
 
       const req = http.request(

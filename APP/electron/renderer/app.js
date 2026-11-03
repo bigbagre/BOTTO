@@ -247,9 +247,8 @@ async function enviar() {
   try {
     const res = await window.botto.enviarMensagem(texto)
 
-    thinkingBubble.remove()
-
     if (res.erro) {
+      thinkingBubble.remove()
       addLog('ERR', res.erro, 'tag-err')
       addMsg('bot', `Erro: ${res.erro}`)
       setStatus('AGUARDANDO')
@@ -257,14 +256,9 @@ async function enviar() {
       return
     }
 
+    thinkingBubble.remove()
     addMsg('bot', res.texto)
-
-    setStatus('FALANDO')
-    if (res.audio) {
-      await reproduzirAudio(res.audio)
-      addLog('TTS', 'Reprodução concluída.', 'tag-tts')
-    }
-
+    if (res.audio) await reproduzirAudio(res.audio)
   } catch (err) {
     thinkingBubble.remove()
     addLog('ERR', `Falha na conexão: ${err.message}`, 'tag-err')

@@ -34,9 +34,22 @@ CORS(app)
 # CONFIGURAÇÃO API
 # =========================
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
-gemini_key = os.environ["GEMINI_API_KEY"]
-eleven_key = os.environ["ELEVENLABS_API_KEY"]
-client = genai.Client(api_key=gemini_key)
+
+gemini_key = os.environ.get("GEMINI_API_KEY")
+eleven_key = os.environ.get("ELEVENLABS_API_KEY")
+
+if not gemini_key or not eleven_key:
+    missing = []
+    if not gemini_key: missing.append("GEMINI_API_KEY")
+    if not eleven_key: missing.append("ELEVENLABS_API_KEY")
+    raise EnvironmentError(f"Variáveis de ambiente faltando: {', '.join(missing)}. Verifique o arquivo .env em APP\\electron\\")
+
+try:
+    client = genai.Client(api_key=gemini_key)
+except Exception as e:
+    raise EnvironmentError(f"Erro ao inicializar cliente Gemini: {str(e)}")
+
+model_name = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 system_instruction = (
     'Você é um robô assistente chamado Botto. '
@@ -149,7 +162,7 @@ def perguntar_ia(pergunta):
     """Retorna resposta completa — usado no modo voz."""
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=model_name,
             contents=pergunta,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -167,7 +180,7 @@ def perguntar_ia_stream(pergunta, on_token, on_done):
     try:
         texto_completo = ""
         for chunk in client.models.generate_content_stream(
-            model="gemini-3.6-flash",
+            model=model_name,
             contents=pergunta,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -272,62 +285,33 @@ def mensagem():
     dados = request.json
     texto = dados.get('texto', '')
 
-    push_evento("log", {"tag": "GEM", "msg": "Iniciando stream do Gemini..."})
-    push_evento("stream_inicio", {})
+    push_evento("log", {"tag": "GEM", "msg": "Gerando resposta completa..."})
 
-    def executar():
-        texto_completo = ""
-        buffer_tts = ""
-        indice_chunk = 0
-        tts_threads = []
-
-        for chunk in client.models.generate_content_stream(
-            model="gemini-3.6-flash",
+    try:
+        response = client.models.generate_content(
+            model=model_name,
             contents=texto,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 max_output_tokens=10000,
                 temperature=0.5,
             )
-        ):
-            if chunk.text:
-                texto_completo += chunk.text
-                buffer_tts += chunk.text
-                push_evento("stream_token", {"token": chunk.text})
+        )
+        texto_resposta = response.text.strip()
 
-                # Quando tiver uma frase completa, manda para o TTS em paralelo
-                if e_fim_de_frase(buffer_tts):
-                    trecho = buffer_tts
-                    idx = indice_chunk
-                    t = threading.Thread(
-                        target=gerar_e_enviar_chunk,
-                        args=(trecho, idx),
-                        daemon=True
-                    )
-                    t.start()
-                    tts_threads.append(t)
-                    indice_chunk += 1
-                    buffer_tts = ""
+        audio = el_client.text_to_speech.convert(
+            voice_id=VOICE_ID,
+            text=texto_resposta,
+            model_id="eleven_multilingual_v2"
+        )
+        audio_bytes = b''.join(audio)
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
 
-        # Manda o restante que ficou no buffer
-        if buffer_tts.strip():
-            t = threading.Thread(
-                target=gerar_e_enviar_chunk,
-                args=(buffer_tts, indice_chunk),
-                daemon=True
-            )
-            t.start()
-            tts_threads.append(t)
-
-        # Aguarda todos os chunks de TTS terminarem
-        for t in tts_threads:
-            t.join()
-
-        push_evento("stream_fim", {})
-        push_evento("log", {"tag": "TTS", "msg": "Todos os chunks de áudio prontos."})
-
-    threading.Thread(target=executar, daemon=True).start()
-    return jsonify({'ok': True})
+        push_evento("log", {"tag": "TTS", "msg": "Resposta gerada completamente."})
+        return jsonify({'texto': texto_resposta, 'audio': audio_b64, 'modo': 'padrao'})
+    except Exception as e:
+        push_evento("log", {"tag": "ERR", "msg": f"Erro na geração: {str(e)}"})
+        return jsonify({'texto': None, 'audio': None, 'modo': 'erro', 'erro': str(e)})
 
 @app.route('/modo', methods=['POST'])
 def alternar_modo():
