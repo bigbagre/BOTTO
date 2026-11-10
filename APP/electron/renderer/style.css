@@ -325,7 +325,6 @@ html, body {
 
 .msg-user .msg-label { color: var(--cyan-dim); }
 .msg-bot  .msg-label { color: var(--text-muted); }
-
 .msg-bubble {
   max-width: 85%;
   padding: 10px 14px;
@@ -353,6 +352,7 @@ html, body {
   color: var(--text-dim);
   font-style: italic;
 }
+
 .dots-anim::after {
   content: '';
   animation: dots 1.2s steps(4, end) infinite;
@@ -362,6 +362,38 @@ html, body {
   25% { content: '.'; }
   50% { content: '..'; }
   75% { content: '...'; }
+}
+
+/* --- LaTeX Math Rendering --- */
+.math-block {
+  max-width: 90%;
+  padding: 10px 14px;
+  margin: 10px 0;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.math-block .math-label {
+  display: none;
+}
+
+.math-inline {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: rgba(0, 212, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 2px;
+  margin: 0 2px;
+}
+
+.math-inline .math-label {
+  display: none;
 }
 
 /* ── INPUT ZONE ── */

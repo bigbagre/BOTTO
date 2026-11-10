@@ -72,17 +72,22 @@ function aguardarFlask(tentativas = 0) {
 }
 
 function iniciarSSE() {
+  let buffer = ''
   const req = http.request({
     hostname: 'localhost', port: 5001, path: '/stream', method: 'GET'
   }, (res) => {
+    res.setEncoding('utf8')
     res.on('data', (chunk) => {
-      const linhas = chunk.toString().split('\n')
-      for (const linha of linhas) {
-        if (linha.startsWith('data: ')) {
-          try {
-            const evento = JSON.parse(linha.slice(6))
-            if (mainWindow) mainWindow.webContents.send('sse-evento', evento)
-          } catch {}
+      buffer += chunk
+      const partes = buffer.split('\n\n')
+      buffer = partes.pop()  // guarda o pedaço incompleto
+      for (const parte of partes) {
+        if (!parte.startsWith('data: ')) continue
+        try {
+          const evento = JSON.parse(parte.slice(6))
+          if (mainWindow) mainWindow.webContents.send('sse-evento', evento)
+        } catch (e) {
+          console.error('SSE parse:', e.message)
         }
       }
     })

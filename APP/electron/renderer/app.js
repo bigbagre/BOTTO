@@ -67,6 +67,15 @@ function agora() {
   return new Date().toLocaleTimeString('pt-BR', { hour12: false })
 }
 
+function processarTextoLaTeX(texto) {
+  if (!texto) return texto
+  // Converter block equations $$...$$
+  let html = texto.replace(/\$\$(.+?)\$\$/gs, '<div class="math-block">$1</div>')
+  // Converter inline $...$ (não capturando $$)
+  html = html.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, '<span class="math-inline">$1</span>')
+  return html
+}
+
 function addLog(tag, msg, tagClass = 'tag-sys') {
   const line = document.createElement('div')
   line.className = 'log-line new'
@@ -93,7 +102,7 @@ function addMsg(role, texto, thinking = false) {
   if (thinking) {
     bubble.innerHTML = `Processando<span class="dots-anim"></span>`
   } else {
-    bubble.textContent = texto
+    bubble.innerHTML = processarTextoLaTeX(texto)
   }
 
   wrap.appendChild(label)
@@ -127,11 +136,10 @@ function setBusy(busy) {
 
 function reproduzirAudio(audioB64) {
   return new Promise((resolve) => {
-    const audioData = 'data:audio/mpeg;base64,' + audioB64
-    const audio     = new Audio(audioData)
-    audio.onended  = resolve
-    audio.onerror  = resolve
-    audio.play()
+    const audio = new Audio('data:audio/wav;base64,' + audioB64)
+    audio.onended = resolve
+    audio.onerror = () => { console.error('Erro de áudio:', audio.error); resolve() }
+    audio.play().catch(e => { console.error('play falhou:', e); resolve() })
   })
 }
 
@@ -161,7 +169,7 @@ function iniciarSSE() {
     if (tipo === 'status') setStatus(dados)
     if (tipo === 'transcricao') addMsg('user', dados)
     if (tipo === 'resposta') {
-      addMsg('bot', dados.texto)
+      addMsg('bot', processarTextoLaTeX(dados.texto))
       if (dados.audio) await reproduzirAudio(dados.audio)
     }
     if (tipo === 'stream_inicio') {
@@ -287,7 +295,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.log-time').forEach(el => {
     el.textContent = agora()
   })
-  iniciarSSE()
+  
   
   // ── LOADING SCREEN ───────────────────────────
 
