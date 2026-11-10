@@ -21,25 +21,9 @@ from dotenv import load_dotenv
 import os
 import sys
 
+from kokoro import KPipeline
+
 import soundfile as sf
-
-import espeakng_loader
-from kokoro_onnx import EspeakConfig, Kokoro
-
-# Load voices.bin and convert to .npy if needed
-VOICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voices_fixed.npy')
-import pathlib
-voices_npy = pathlib.Path(VOICES_PATH)
-if not voices_npy.exists():
-    # Convert voices.bin to .npy - format correto: (n_voices, 510, 1, 256)
-    import struct
-    with open('voices.bin', 'rb') as f:
-        data = f.read()
-    raw = np.frombuffer(data, dtype=np.float32)
-    por_voz = 510 * 256
-    n = raw.size // por_voz
-    voices = raw.reshape(n, 510, 1, 256)
-    np.save(VOICES_PATH, voices)
 
 
 def resource_path(relative_path):
@@ -74,18 +58,9 @@ model_name = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 # =========================
 # CONFIGURAÇÃO KOKORO TTS
 # =========================
-espeak_config = EspeakConfig(
-    data_path=espeakng_loader.get_data_path(),
-    lib_path=espeakng_loader.get_library_path()
-)
-kokoro_model = Kokoro(
-    'C:\\Users\\renat\\OneDrive\\Documentos\\Engenharia\\BOTTO\\APP\\electron\\model.onnx',
-    VOICES_PATH,
-    espeak_config=espeak_config
-)
-KOKORO_VOICE = 'pm_alex'  # voz masculina
-
-VOZES_PT = {"pf_dora": 42, "pm_alex": 43, "pm_santa": 44}
+tts_pipeline = KPipeline(lang_code='p')  # 'p' = português brasileiro
+KOKORO_VOICE = 'pm_alex'                 # ou 'pf_dora', 'pm_santa'
+tts_lock = threading.Lock()              # Flask e o loop de voz podem chamar ao mesmo tempo
 
 system_instruction = (
     'Você é o Botto, assistente técnico sarcástico. '
@@ -156,26 +131,28 @@ def push_evento(tipo, dados):
 # FUNÇÕES AUXILIARES
 # =========================
 def gerar_audio(texto, voz_idx=None, speed=0.9, pausa=0.35):
+    """Gera áudio com o Kokoro oficial e devolve WAV em base64."""
     try:
-        if voz_idx is None:
-            voz_idx = VOZES_PT.get(KOKORO_VOICE, 43)
-
         texto_tts = traduzir_latex_para_voz(texto)
         texto_tts = re.sub(r'[*#`_]', '', texto_tts)
-
         frases = [f.strip() for f in re.split(r'(?<=[.!?])\s+|\n+', texto_tts) if f.strip()]
-        voz = kokoro_model.voices[voz_idx]
+        if not frases:
+            return None
 
-        pedacos, sr = [], 24000
-        for frase in frases:
-            samples, sr = kokoro_model.create(frase, voice=voz, speed=speed, lang="pt-br")
-            pedacos.append(samples)
-            pedacos.append(np.zeros(int(sr * pausa), dtype=np.float32))  # silêncio
+        sr = 24000
+        silencio = np.zeros(int(sr * pausa), dtype=np.float32)
+        pedacos = []
 
-        audio = np.concatenate(pedacos[:-1]) if pedacos else np.zeros(1, dtype=np.float32)
+        with tts_lock:
+            for frase in frases:
+                for _, _, audio in tts_pipeline(frase, voice=KOKORO_VOICE, speed=speed):
+                    a = audio.detach().cpu().numpy() if hasattr(audio, 'detach') else np.asarray(audio)
+                    pedacos.append(a.astype(np.float32))
+                pedacos.append(silencio)
 
+        wav = np.concatenate(pedacos[:-1])
         buf = io.BytesIO()
-        sf.write(buf, audio, sr, format="WAV", subtype="PCM_16")
+        sf.write(buf, wav, sr, format="WAV", subtype="PCM_16")
         return base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception as e:
         push_evento("log", {"tag": "ERR", "msg": f"Erro TTS: {str(e)}"})
