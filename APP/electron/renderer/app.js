@@ -157,7 +157,12 @@ async function reproduzirFila() {
     reproduzirFila()
 }
 
+let sseIniciado = false
+
 function iniciarSSE() {
+  if (sseIniciado) return
+  sseIniciado = true
+
   window.botto.iniciarSSE(async ({ tipo, dados }) => {
     if (tipo === 'log') {
       const tagMap = {
@@ -169,39 +174,33 @@ function iniciarSSE() {
     if (tipo === 'status') setStatus(dados)
     if (tipo === 'transcricao') addMsg('user', dados)
     if (tipo === 'resposta') {
-      addMsg('bot', processarTextoLaTeX(dados.texto))
+      addMsg('bot', dados.texto)
       if (dados.audio) await reproduzirAudio(dados.audio)
     }
     if (tipo === 'stream_inicio') {
-    audioQueue.length = 0
-    reproduzindo = false
-    addMsg('bot', '', true)  // bolha "pensando"
-}
-
+      audioQueue.length = 0
+      reproduzindo = false
+      addMsg('bot', '', true)
+    }
     if (tipo === 'stream_token') {
-    // Atualiza a bolha com o texto chegando
-    const ultima = chatHistory.lastElementChild
-    if (ultima && ultima.classList.contains('msg-thinking')) {
+      const ultima = chatHistory.lastElementChild
+      if (ultima && ultima.classList.contains('msg-thinking')) {
         const bubble = ultima.querySelector('.msg-bubble')
         bubble.classList.remove('dots-anim')
         bubble.textContent += dados.token
+      }
     }
-}
-
     if (tipo === 'stream_audio_chunk') {
-    // Insere na fila na ordem correta
-    audioQueue.push({ audio: dados.audio, indice: dados.indice })
-    audioQueue.sort((a, b) => a.indice - b.indice)
-    reproduzirFila()
-}
-
+      audioQueue.push({ audio: dados.audio, indice: dados.indice })
+      audioQueue.sort((a, b) => a.indice - b.indice)
+      reproduzirFila()
+    }
     if (tipo === 'stream_fim') {
-    // Remove a classe thinking da última bolha
-    const ultima = chatHistory.lastElementChild
-    if (ultima) ultima.classList.remove('msg-thinking')
-    setStatus('AGUARDANDO')
-    setBusy(false)
-}
+      const ultima = chatHistory.lastElementChild
+      if (ultima) ultima.classList.remove('msg-thinking')
+      setStatus('AGUARDANDO')
+      setBusy(false)
+    }
   })
 }
 
@@ -289,15 +288,164 @@ userInput.addEventListener('keydown', (e) => {
   }
 })
 
-// ── INICIALIZAÇÃO ─────────────────────────────
+// ── AUTENTICAÇÃO ──────────────────────────────
 
-window.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.log-time').forEach(el => {
-    el.textContent = agora()
-  })
-  
-  
-  // ── LOADING SCREEN ───────────────────────────
+// Hoje: Flask local. No beta: trocar pela URL do Funnel (https://SUA-URL.ts.net)
+const API_AUTH = 'http://localhost:5001'
+
+const loginScreen  = document.getElementById('login-screen')
+const loginForm    = document.getElementById('login-form')
+const registerForm = document.getElementById('register-form')
+const showRegister = document.getElementById('show-register')
+const hideRegister = document.getElementById('hide-register')
+const loginMsg     = document.getElementById('login-msg')
+const userPanel    = document.getElementById('user-panel')
+const userName     = document.getElementById('user-name')
+const userEmail    = document.getElementById('user-email')
+const userMenu     = document.getElementById('user-menu')
+const menuNome     = document.getElementById('menu-nome')
+const menuEmail    = document.getElementById('menu-email')
+
+// ... rest of existing code
+
+function mostrarMsgLogin(msg, erro = true) {
+  loginMsg.textContent = msg || ''
+  loginMsg.style.color = erro ? 'var(--red)' : 'var(--green)'
+}
+
+function mostrarFormLogin() {
+  registerForm.style.display = 'none'
+  loginForm.style.display = 'block'
+}
+
+function mostrarFormRegistro() {
+  mostrarMsgLogin('')
+  loginForm.style.display = 'none'
+  registerForm.style.display = 'block'
+}
+
+function mostrarTelaLogin() {
+  document.getElementById('loading-screen').classList.add('hidden')
+  loginScreen.classList.remove('hidden')
+  mostrarFormLogin()
+}
+
+function entrarNoApp(usuario) {
+  loginScreen.classList.add('hidden')
+  document.getElementById('loading-screen').classList.add('hidden')
+  document.getElementById('main-shell').classList.remove('hidden')
+  mostrarUsuario(usuario)
+  iniciarSSE()
+  userInput.focus()
+}
+
+function mostrarUsuario(usuario) {
+  const email = (usuario && usuario.email) || ''
+  const nome  = (usuario && usuario.nome) || email.split('@')[0] || 'Convidado'
+  userName.textContent  = nome
+  userEmail.textContent = email
+  menuNome.textContent  = nome
+  menuEmail.textContent = email
+  userPanel.classList.add('logado')
+}
+
+function fecharMenu() {
+  userMenu.classList.remove('aberto')
+  userName.classList.remove('clicked')
+}
+
+// Chamada SÓ depois que o carregamento terminou (ver onLoadingDone)
+async function verificarLembrete() {
+  const token = localStorage.getItem('botto-token')
+  if (!token) return mostrarTelaLogin()
+
+  try {
+    const res = await fetch(API_AUTH + '/api/auth/remember-me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
+    const data = await res.json()
+    if (data.autenticado) {
+      localStorage.setItem('botto-token', data.token)  // token rotacionado
+      entrarNoApp(data)
+    } else {
+      localStorage.removeItem('botto-token')
+      mostrarTelaLogin()
+    }
+  } catch {
+    mostrarTelaLogin()  // servidor fora do ar: mantém o token guardado
+  }
+}
+
+async function login() {
+  const email   = document.getElementById('login-email').value.trim()
+  const senha   = document.getElementById('login-password').value
+  const lembrar = document.getElementById('remember-me').checked
+
+  if (!email || !senha) return mostrarMsgLogin('Preencha email e senha')
+
+  try {
+    const res = await fetch(API_AUTH + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: senha, lembrar })
+    })
+    const data = await res.json()
+    if (!res.ok) return mostrarMsgLogin(data.erro || 'Falha no login')
+
+    if (lembrar && data.token) localStorage.setItem('botto-token', data.token)
+    else localStorage.removeItem('botto-token')
+
+    document.getElementById('login-password').value = ''
+    entrarNoApp(data)
+  } catch {
+    mostrarMsgLogin('Não foi possível conectar ao servidor')
+  }
+}
+
+async function registrar() {
+  const email = document.getElementById('register-email').value.trim()
+  const senha = document.getElementById('register-password').value
+  const nome  = document.getElementById('register-nome').value.trim()
+
+  if (!email || !senha) return mostrarMsgLogin('Preencha email e senha')
+
+  try {
+    const res = await fetch(API_AUTH + '/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: senha, nome })
+    })
+    const data = await res.json()
+    if (!res.ok) return mostrarMsgLogin(data.erro || 'Falha no registro')
+
+    document.getElementById('register-password').value = ''
+    mostrarFormLogin()
+    mostrarMsgLogin('Conta criada! Faça login.', false)
+  } catch {
+    mostrarMsgLogin('Não foi possível conectar ao servidor')
+  }
+}
+
+loginForm.addEventListener('submit', (e) => { e.preventDefault(); login() })
+registerForm.addEventListener('submit', (e) => { e.preventDefault(); registrar() })
+showRegister.addEventListener('click', (e) => { e.preventDefault(); mostrarFormRegistro() })
+hideRegister.addEventListener('click', () => { mostrarMsgLogin(''); mostrarFormLogin() })
+
+// ── painel de usuário (bottom-left) ────────────────
+// ── painel de usuário (canto inferior esquerdo) ──
+userName.addEventListener('click', (e) => {
+  e.stopPropagation()
+  userMenu.classList.toggle('aberto')
+  userName.classList.toggle('clicked')
+})
+
+document.addEventListener('click', (e) => {
+  if (!userPanel.contains(e.target)) fecharMenu()
+})
+
+// ── LOADING SCREEN ─────────────────────────────
 
 const loadingScreen = document.getElementById('loading-screen')
 const mainShell     = document.getElementById('main-shell')
@@ -338,12 +486,7 @@ window.botto.onLoadingDone(() => {
   loadingStatus.innerHTML = 'SISTEMA PRONTO'
   addLoadingLog('✓ Backend conectado', 'ok')
   addLoadingLog('✓ Pronto para uso', 'ok')
-  setTimeout(() => {
-    loadingScreen.classList.add('hidden')
-    mainShell.classList.remove('hidden')
-    iniciarSSE()
-    userInput.focus()
-  }, 800)
+  setTimeout(verificarLembrete, 800)
 })
 
 window.botto.onLoadingError(() => {
@@ -352,5 +495,27 @@ window.botto.onLoadingError(() => {
   addLoadingLog('Verifique o api.py e tente novamente', 'err')
   loadingBar.style.background = 'var(--red)'
 })
-  userInput.focus()
-})
+
+// ── LOGUT ───────────────────────────────────────
+async function logout() {
+  const token = localStorage.getItem('botto-token')
+  localStorage.removeItem('botto-token')
+
+  try {
+    if (token) {
+      await fetch(API_AUTH + '/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+    }
+  } catch {}  // mesmo sem rede, o logout local vale
+
+  fecharMenu()
+  userPanel.classList.remove('logado')
+  document.getElementById('main-shell').classList.add('hidden')
+  mostrarTelaLogin()
+  mostrarMsgLogin('Você foi desconectado', false)
+}
+
+

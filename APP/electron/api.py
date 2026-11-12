@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from google import genai
 from google.genai import types
+from google import genai
 import base64
 import io
 import json
@@ -18,18 +18,35 @@ import openwakeword
 from openwakeword.model import Model as WakeWordModel
 import pyaudio
 from dotenv import load_dotenv
+import soundfile as sf
+import espeakng_loader
+from kokoro import KPipeline
 import os
 import sys
+import hashlib
+import sqlite3
+import time
 
-from kokoro import KPipeline
+from argon2 import PasswordHasher
+import secrets
 
-import soundfile as sf
+hasher = PasswordHasher()
 
+basedir = os.path.abspath(os.path.dirname(__file__))
+db_path = os.path.join(basedir, '..', '..', 'database.db')
 
-def resource_path(relative_path):
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+def get_db():
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def execute_sql(conn, sql, params=()):
+    cursor = conn.cursor()
+    cursor.execute(sql, params)
+    conn.commit()
+    return cursor
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 # =========================
 # CONFIGURAÇÃO FLASK
@@ -63,7 +80,7 @@ KOKORO_VOICE = 'pm_alex'                 # ou 'pf_dora', 'pm_santa'
 tts_lock = threading.Lock()              # Flask e o loop de voz podem chamar ao mesmo tempo
 
 system_instruction = (
-    'Você é o Botto, assistente técnico sarcástico. '
+    'Você é o Botto, assistente técnico. '
     'Seja objetivo. '
     'Não dê respostas prontas - encoraje o usuário a pesquisar.'
     'Em dúvidas acadêmicas, indique o caminho, não a resposta.'
@@ -177,65 +194,29 @@ def e_fim_de_frase(texto):
     return bool(re.search(r'[.!?;,\n]', texto)) and len(texto) > 20
 
 def gerar_e_enviar_chunk(trecho, indice):
-    """Gera áudio Kokoro de um trecho e envia via SSE para o app reproduzir."""
-    try:
-        # Traduzir LaTeX para leitura em voz antes de sintetizar
-        trecho_para_tts = traduzir_latex_para_voz(trecho.strip())
-        
-        # Tokenize the text using the tokenizer
-        phonemes = kokoro_model.tokenizer.phonemize(trecho_para_tts, 'pt-br')
-        tokens = kokoro_model.tokenizer.tokenize(phonemes)
-        tokens_array = np.array(tokens).reshape(1, -1).astype(np.int64)
-        
-        # Get voice style and reshape to [1, 256] as expected by the model
-        voice_style = kokoro_model.voices[0, 0, 0].reshape(1, -1).astype(np.float32)
-        
-        # Speed as float32 array
-        speed = np.array([1.0], dtype=np.float32)
-        
-        # Run ONNX session directly
-        audio_array = kokoro_model.sess.run(
-            None,
-            {
-                'tokens': tokens_array,
-                'style': voice_style,
-                'speed': speed
-            }
-        )[0]
-        
-        audio_bytes = audio_array.tobytes()
-        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+    """Gera o áudio de um trecho (WAV em base64) e envia via SSE para o app tocar."""
+    audio_b64 = gerar_audio(trecho.strip())
+    if audio_b64:
         push_evento("stream_audio_chunk", {"audio": audio_b64, "indice": indice})
-    except Exception as e:
-        push_evento("log", {"tag": "ERR", "msg": f"Erro TTS chunk {indice}: {str(e)}"})
 
 def processar_latex(texto):
-    """Processa texto convertendo equacoes LaTeX para renderizacao HTML.
-
-    Converte:
-    - $$equacao$$ ou [equacao] para block equations
-    - $equacao$ para inline equations
-    """
     import re
-    
-    # Substituir block equations $$...$$ ou \[...\]
-    texto = re.sub(r'\$\$(.+?)\$\$', r'<div class="math-block">\1</div>', texto, flags=re.DOTALL)
-    texto = re.sub(r'\\\[(.+?)\\\]', r'<div class="math-block">\1</div>', texto, flags=re.DOTALL)
-    
-    # Substituir inline $...$ (cuidado para nao capturar $$)
-    texto = re.sub(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', r'<span class="math-inline">\1</span>', texto)
-    
+    texto = re.sub(r'\$\$(.+?)\$\$', r'<div class="math-block">$1</div>', texto, flags=re.DOTALL)
+    texto = re.sub(r'\\\[(.+?)\\\]', r'<div class="math-block">$1</div>', texto, flags=re.DOTALL)
+    texto = re.sub(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', r'<span class="math-inline">$1</span>', texto)
     return texto
 
-
-def traduzir_latex_para_voz(texto):
-    _SIMBOLOS = {
+# =========================
+# LATEX -> FALA (TTS)
+# =========================
+_SIMBOLOS = {
     'alpha': 'alfa', 'beta': 'beta', 'gamma': 'gama', 'delta': 'delta',
     'Delta': 'delta', 'epsilon': 'épsilon', 'theta': 'teta', 'lambda': 'lâmbda',
     'mu': 'mi', 'pi': 'pi', 'sigma': 'sigma', 'omega': 'ômega', 'rho': 'rô',
     'phi': 'fi', 'tau': 'tau',
     'times': 'vezes', 'cdot': 'vezes', 'div': 'dividido por',
-    'pm': 'mais ou menos', 'leq': 'menor ou igual a', 'le': 'menor ou igual a',
+    'pm': 'mais ou menos',
+    'leq': 'menor ou igual a', 'le': 'menor ou igual a',
     'geq': 'maior ou igual a', 'ge': 'maior ou igual a', 'neq': 'diferente de',
     'approx': 'aproximadamente', 'to': 'tende a', 'rightarrow': 'leva a',
     'infty': 'infinito', 'partial': 'd parcial', 'in': 'pertence a',
@@ -251,9 +232,17 @@ _OPERADORES = {
 
 _TEXTO_PURO = ('text', 'mathrm', 'mathbf', 'mathit', 'mathbb', 'operatorname')
 
+_PADRAO_LATEX = re.compile(
+    r'\$\$(.+?)\$\$'                          # $$ ... $$
+    r'|\\\[(.+?)\\\]'                         # \[ ... \]
+    r'|\\\((.+?)\\\)'                         # \( ... \)
+    r'|(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)',  # $ ... $
+    re.DOTALL
+)
+
 
 def _ler_arg(s, i):
-    """Lê um argumento LaTeX a partir de i: {grupo}, \\comando ou 1 caractere."""
+    """Lê um argumento LaTeX a partir de s[i]: {...}, \\comando ou um caractere."""
     while i < len(s) and s[i] == ' ':
         i += 1
     if i >= len(s):
@@ -277,7 +266,7 @@ def _ler_arg(s, i):
 
 
 def _ler_limites(s, i):
-    """Lê _baixo e ^cima (em qualquer ordem) depois de \\int, \\sum, \\lim."""
+    """Lê os limites _{baixo}^{cima} de \\int, \\sum, \\prod e \\lim."""
     baixo = cima = None
     for _ in range(2):
         j = i
@@ -293,11 +282,9 @@ def _ler_limites(s, i):
 
 
 def _latex_expr_para_fala(s):
-    """Converte o conteúdo de uma expressão LaTeX em texto falado (pt-BR)."""
     s = re.sub(r'\\(left|right|displaystyle|bigg?|Bigg?)(?![a-zA-Z])', '', s)
     s = re.sub(r'\\[,;:! ]', ' ', s)
-    s = re.sub(r'\^\s*\{?\\circ\}?', ' graus ', s)
-
+    s = re.sub(r'\^\s*\\circ\.?', ' graus ', s)
     out = []
     i = 0
     while i < len(s):
@@ -385,176 +372,159 @@ def _latex_expr_para_fala(s):
     return re.sub(r'\s+', ' ', texto).strip()
 
 
-_PADRAO_LATEX = re.compile(
-    r'\$\$(.+?)\$\$'                    # $$ ... $$
-    r'|\\\[(.+?)\\\]'                   # \[ ... \]
-    r'|\\\((.+?)\\\)'                   # \( ... \)
-    r'|(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)',  # $ ... $
-    re.DOTALL
-)
-
-
 def traduzir_latex_para_voz(texto):
-    """Troca as equações LaTeX do texto por leitura em português; o resto fica intacto."""
+    """Troca as fórmulas LaTeX do texto por uma versão falada em português."""
+    if not texto:
+        return ''
+
     def trocar(m):
         expr = next(g for g in m.groups() if g is not None)
         return f' {_latex_expr_para_fala(expr)} '
 
     texto = _PADRAO_LATEX.sub(trocar, texto)
+    texto = re.sub(r'\s+([.,;!?])', r'\1', texto)   # "h ." -> "h."
     return re.sub(r'[ \t]{2,}', ' ', texto).strip()
 
-
-def perguntar_ia(pergunta):
-    """Retorna resposta completa — usado no modo voz."""
+def perguntar_ia(texto):
+    """Envia pergunta para o Gemini e retorna a resposta."""
     try:
-        response = client.models.generate_content(
+        resposta = client.models.generate_content(
             model=model_name,
-            contents=pergunta,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                max_output_tokens=2000,
-                temperature=0.5,
-            )
+            contents=texto,
+            config={'system_instruction': system_instruction}
         )
-        return response.text.strip()
+        return resposta.text.strip()
     except Exception as e:
-        return f"Erro na comunicação com a IA: {str(e)}"
-
-
-def perguntar_ia_stream(pergunta, on_token, on_done):
-    """Streaming — chama on_token a cada chunk e on_done com o texto completo."""
-    try:
-        texto_completo = ""
-        for chunk in client.models.generate_content_stream(
-            model=model_name,
-            contents=pergunta,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                max_output_tokens=2000,
-                temperature=0.5,
-            )
-        ):
-            if chunk.text:
-                texto_completo += chunk.text
-                on_token(chunk.text)
-        on_done(texto_completo)
-    except Exception as e:
-        on_done(f"Erro na comunicação com a IA: {str(e)}")
-
-def ouvir_vosk():
-    push_evento("status", "OUVINDO")
-    with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
-                           channels=1, callback=vosk_callback):
-        while True:
-            data = vosk_queue.get()
-            if rec.AcceptWaveform(data):
-                result = json.loads(rec.Result())
-                texto = result.get("text", "").strip()
-                if texto:
-                    return texto
-                else:
-                    return None
+        push_evento("log", {"tag": "ERR", "msg": f"Erro IA: {str(e)}"})
+        return f"Erro ao consultar IA: {str(e)}"
 
 # =========================
-# THREAD: MODO VOZ
+# ROTAS DE AUTENTICAÇÃO
 # =========================
-def loop_voz():
-    global voz_ativa
-    primeira_vez = True
-    push_evento("log", {"tag": "VOZ", "msg": "Loop de wake word iniciado."})
+REMEMBER_DIAS = 30
+SENHA_MIN = 8
+DUMMY_HASH = hasher.hash('senha-falsa-para-igualar-tempo')
 
+def _agora():
+    return datetime.utcnow()
+
+def _hash_token(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def _criar_remember_token(conn, user_id):
+    token = secrets.token_urlsafe(32)
+    execute_sql(conn,
+        'INSERT INTO remember_tokens (user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)',
+        (user_id, _hash_token(token),
+         (_agora() + timedelta(days=REMEMBER_DIAS)).isoformat(), _agora().isoformat()))
+    return token
+
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get('email') or '').strip().lower()
+    password = dados.get('password') or ''
+    nome = (dados.get('nome') or '').strip() or None
+
+    if not email or '@' not in email:
+        return jsonify({'erro': 'Email inválido'}), 400
+    if len(password) < SENHA_MIN:
+        return jsonify({'erro': f'A senha precisa ter pelo menos {SENHA_MIN} caracteres'}), 400
+
+    conn = get_db()
     try:
-        while voz_ativa:
-            audio = audio_stream.read(1280, exception_on_overflow=False)
-            audio_np = np.frombuffer(audio, dtype=np.int16)
-            prediction = wakeword_model.predict(audio_np)
-
-            for word, score in prediction.items():
-                if score > 0.5 and voz_ativa:
-                    push_evento("log", {"tag": "WAKE", "msg": f"Wake word detectada! Score: {score:.2f}"})
-                    push_evento("status", "WAKE WORD")
-
-                    if primeira_vez:
-                        resposta_init = "Online. O que deseja?"
-                        primeira_vez = False
-                    else:
-                        resposta_init = "Sim?"
-
-                    audio_b64 = gerar_audio(resposta_init)
-                    if audio_b64:
-                        push_evento("log", {"tag": "TTS", "msg": f'Falando: "{resposta_init}"'})
-                        audio_b64 = gerar_audio(resposta_init, voz_idx=VOZES_PT.get(KOKORO_VOICE, 43))
-                    else:
-                        push_evento("log", {"tag": "ERR", "msg": "Falha ao gerar áudio inicial"})
-
-                    comando = ouvir_vosk()
-
-                    if comando is None:
-                        push_evento("log", {"tag": "VOZ", "msg": "Não entendi o comando."})
-                        audio_b64 = gerar_audio("Não entendi. Repita após a wake word.", voz_idx=VOZES_PT.get(KOKORO_VOICE, 43))
-                    if audio_b64:
-                        reproduzir_audio_b64(audio_b64)
-                    else:
-                        push_evento("log", {"tag": "ERR", "msg": "Falha ao gerar áudio não entendido"})
-                        push_evento("status", "AGUARDANDO")
-                        continue
-
-                    push_evento("log", {"tag": "VOZ", "msg": f'Comando: "{comando}"'})
-                    push_evento("transcricao", comando)
-
-                    if any(p in comando.lower() for p in ["sair", "desligar", "tchau"]):
-                        push_evento("log", {"tag": "SYS", "msg": "Comando de encerramento recebido."})
-                        audio_b64 = gerar_audio("Desligando. Até a próxima.", voz_idx=VOZES_PT.get(KOKORO_VOICE, 43))
-                    if audio_b64:
-                        reproduzir_audio_b64(audio_b64)
-                    else:
-                        push_evento("log", {"tag": "ERR", "msg": "Falha ao gerar áudio desligando"})
-                        voz_ativa = False
-                        break
-
-                    push_evento("status", "PROCESSANDO")
-                    push_evento("log", {"tag": "GEM", "msg": "Enviando para Gemini..."})
-
-                    texto_completo = ""
-
-                    def on_token(token):
-                        nonlocal texto_completo
-                        texto_completo += token
-                        push_evento("log", {"tag": "GEM_TOKEN", "msg": token})
-
-                    def on_done(texto_final):
-                        nonlocal texto_completo
-                        texto_completo = texto_final
-                        push_evento("log", {"tag": "GEM", "msg": f"Resposta: {texto_completo[:60]}..."})
-                        audio_b64 = gerar_audio(texto_completo, voz_idx=VOZES_PT.get(KOKORO_VOICE, 43))
-                        if audio_b64:
-                            push_evento("resposta", {"texto": texto_completo, "audio": audio_b64})
-                            reproduzir_audio_b64(audio_b64)
-                        else:
-                            push_evento("log", {"tag": "ERR", "msg": "Falha ao gerar áudio resposta"})
-                        push_evento("status", "AGUARDANDO")
-
-                    perguntar_ia_stream(comando, on_token=on_token, on_done=on_done)
-
-    except Exception as e:
-        push_evento("log", {"tag": "ERR", "msg": f"Erro no loop de voz: {str(e)}"})
+        try:
+            cur = execute_sql(conn,
+                'INSERT INTO users (email, password_hash, nome, created_at) VALUES (?, ?, ?, ?)',
+                (email, hasher.hash(password), nome, _agora().isoformat()))
+        except sqlite3.IntegrityError:
+            return jsonify({'erro': 'Email já cadastrado'}), 409
+        return jsonify({'id': cur.lastrowid, 'email': email, 'nome': nome}), 201
     finally:
-        push_evento("status", "AGUARDANDO")
-        push_evento("log", {"tag": "VOZ", "msg": "Loop de wake word encerrado."})
+        conn.close()
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get('email') or '').strip().lower()
+    password = dados.get('password') or ''
+    lembrar = bool(dados.get('lembrar'))
+
+    if not email or not password:
+        return jsonify({'erro': 'Email e senha são obrigatórios'}), 400
+
+    conn = get_db()
+    try:
+        user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+        if not user:
+            try:
+                hasher.verify(DUMMY_HASH, password)  # iguala o tempo de resposta
+            except Exception:
+                pass
+            return jsonify({'erro': 'Credenciais inválidas'}), 401
+
+        try:
+            hasher.verify(user['password_hash'], password)
+        except Exception:
+            return jsonify({'erro': 'Credenciais inválidas'}), 401
+
+        resposta = {'id': user['id'], 'email': user['email'], 'nome': user['nome']}
+        if lembrar:  # só cria token se o usuário pediu
+            resposta['token'] = _criar_remember_token(conn, user['id'])
+        return jsonify(resposta), 200
+    finally:
+        conn.close()
+
+@app.route('/api/auth/remember-me', methods=['POST'])
+def auth_remember_me():
+    dados = request.get_json(silent=True) or {}
+    token = dados.get('token')
+    if not token:
+        return jsonify({'autenticado': False}), 401
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT * FROM remember_tokens WHERE token_hash = ? AND expires_at > ?',
+            (_hash_token(token), _agora().isoformat())).fetchone()
+        if not row:
+            return jsonify({'autenticado': False}), 401
+
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (row['user_id'],)).fetchone()
+        if not user:
+            return jsonify({'autenticado': False}), 401
+
+        # rotação: o token usado é apagado e um novo é emitido
+        execute_sql(conn, 'DELETE FROM remember_tokens WHERE id = ?', (row['id'],))
+        novo = _criar_remember_token(conn, user['id'])
+        return jsonify({'autenticado': True, 'id': user['id'], 'email': user['email'],
+                        'nome': user['nome'], 'token': novo}), 200
+    finally:
+        conn.close()
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    dados = request.get_json(silent=True) or {}
+    token = dados.get('token')
+    conn = get_db()
+    try:
+        if token:
+            execute_sql(conn, 'DELETE FROM remember_tokens WHERE token_hash = ?', (_hash_token(token),))
+        return jsonify({'mensagem': 'Logout efetuado'}), 200
+    finally:
+        conn.close()
+
 
 # =========================
-# ROTAS FLASK
+# ROTAS FLASK EXISTENTES
 # =========================
-
-
-
 
 @app.route('/mensagem', methods=['POST'])
 def mensagem():
     dados = request.get_json(silent=True) or {}
     texto = dados.get('texto', '').strip()
 
-    if not texto:  # o aguardarFlask() manda '{}' só para testar se o servidor subiu
+    if not texto:
         return jsonify({'texto': '', 'audio': None, 'modo': 'vazio'})
 
     push_evento("log", {"tag": "GEM", "msg": "Gerando resposta..."})
@@ -591,7 +561,6 @@ def alternar_modo():
 
     return jsonify({'modo': modo_atual})
 
-
 @app.route('/stream')
 def stream():
     def gerador():
@@ -608,6 +577,42 @@ def stream():
     return Response(gerador(), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
+
+def loop_voz():
+    """Loop principal do modo voz: captura áudio, reconhece fala, gera resposta via IA e fala."""
+    global voz_ativa, modo_atual
+    
+    push_evento("log", {"tag": "SYS", "msg": "Loop de voz iniciado."})
+    
+    while voz_ativa:
+        try:
+            # Captura áudio do microfone
+            data = audio_stream.read(1280, exception_on_overrun=False)
+            vosk_queue.put(data)
+            
+            # Processa reconhecimento de fala
+            if rec.AcceptWaveform(data):
+                resultado = rec.Result()
+                texto = json.loads(resultado)["text"]
+                
+                if texto.strip():
+                    push_evento("log", {"tag": "FALA", "msg": f"Ouvido: {texto}"})
+                    
+                    # Envia para a IA
+                    resposta = perguntar_ia(texto)
+                    push_evento("log", {"tag": "TTS", "msg": "Sintetizando áudio..."})
+                    
+                    # Gera áudio da resposta
+                    audio_b64 = gerar_audio(resposta)
+                    if audio_b64:
+                        reproduzir_audio_b64(audio_b64)
+                        push_evento("stream_audio_chunk", {"audio": audio_b64, "indice": 0})
+                    
+                    # Pequena pausa após resposta
+                    time.sleep(0.5)
+        except Exception as e:
+            push_evento("log", {"tag": "ERR", "msg": f"Erro no loop de voz: {str(e)}"})
+            time.sleep(0.1)
 
 if __name__ == '__main__':
     app.run(port=5001, threaded=True, use_reloader=False)

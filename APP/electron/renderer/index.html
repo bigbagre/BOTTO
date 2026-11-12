@@ -42,6 +42,54 @@
     </div>
   </div>
 
+  <!-- Tela de Login / Registro -->
+  <div class="login-screen hidden" id="login-screen">
+    <div class="login-content">
+      <div class="login-title">BOTTO</div>
+      <div class="login-subtitle">Entre ou registre-se para continuar</div>
+      <div class="login-msg" id="login-msg"></div>
+      
+      <form id="login-form">
+        <div class="input-group">
+          <input type="email" id="login-email" class="user-input" placeholder="Email" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="login-password" class="user-input" placeholder="Senha" required />
+        </div>
+        <div class="input-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="remember-me" />
+            <span class="checkbox-span">Lembrar-me</span>
+          </label>
+        </div>
+        <div class="action-buttons">
+          <button type="submit" class="btn-primary">Entrar</button>
+        </div>
+        <div class="login-links">
+          <a href="#" id="show-register">Não tem conta? Registre-se</a>
+        </div>
+      </form>
+      
+      <form id="register-form" style="display: none;">
+        <div class="input-group">
+          <input type="email" id="register-email" class="user-input" placeholder="Email" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="register-password" class="user-input" placeholder="Senha" required />
+        </div>
+        <div class="input-group">
+          <input type="text" id="register-nome" class="user-input" placeholder="Nome" />
+        </div>
+        <div class="action-buttons">
+          <button type="submit" class="btn-primary">Registrar</button>
+        </div>
+        <div class="action-buttons">
+          <button type="button" class="btn-secondary" id="hide-register">Voltar ao login</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- PAINEL PRINCIPAL -->
   <div class="shell hidden" id="main-shell">
 
@@ -128,6 +176,18 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- USER PANEL (bottom-left) -->
+  <div class="user-panel" id="user-panel">
+    <div class="user-name" id="user-name">Convidado</div>
+    <div class="user-email" id="user-email"></div>
+    <div class="user-menu" id="user-menu">
+      <div class="nome" id="menu-nome"></div>
+      <div class="email" id="menu-email"></div>
+      <button class="btn-fechar" onclick="fecharMenu()">Fechar</button>
+      <button class="btn-sair" onclick="logout()">Sair</button>
     </div>
   </div>
 

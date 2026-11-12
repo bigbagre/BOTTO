@@ -105,6 +105,7 @@ ipcMain.handle('alternar-modo', async (_, modo) => {
   return await postJSON('/modo', { modo })
 })
 
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900, height: 700,
